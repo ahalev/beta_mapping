@@ -6,6 +6,7 @@ from itertools import product
 from beta_constraints.plotting import plot_world_outlines
 from itertools import combinations
 import sys
+import torch
 from scipy.special import comb
 
 class ConstraintMapping:
@@ -16,7 +17,7 @@ class ConstraintMapping:
     """
 
     def __init__(self, env, safety_layer):
-        assert(isinstance(env, Env))
+        assert(isinstance(env, Env) or (hasattr(env, 'step') and hasattr(env, 'reset')))
         self.env = env
         self.safety_layer = safety_layer
         self.p = None
@@ -155,34 +156,17 @@ class ConstraintMapping:
         :return:
         """
         g, c = A, -C
-        return self.get_D_new(c, g)
-        alpha = np.infty
-        for i, c_i in enumerate(c):
-            for j, g_j in enumerate(g[i, :]):
-                alpha_ij = -(c_i+g_j*self.p[j])/g_j
-                if np.abs(alpha_ij) < alpha:
-                    alpha = np.abs(alpha_ij)
-
-        return alpha
-
-    def get_D_new(self, c, g):
-        """
-        Returns the alpha that defines the region D defined by p+alpha[-1,1]^n
-        Here, c is -C and g is A from your notebook, e.g. constraints are of the form c+g@a<=0
-        :param observation:
-        :param c:
-        :return:
-        """
         alpha = np.infty
         shape = self.env.action_space.shape[0]
 
         # TODO this is running twice as many as you need, as e.g. (1,-1,1) and (-1,1,-1) are same under alpha->-alpha
-        for alpha_coef in product((-1,1), repeat=shape): # For each corner
-            for i, c_i in enumerate(c):                 # For each constraint
-                alpha_ij = -(c_i+np.dot(g[i,:],self.p))/np.dot(g[i,:], alpha_coef)
+        for alpha_coef in product((-1, 1), repeat=shape):  # For each corner
+            for i, c_i in enumerate(c):  # For each constraint
+                alpha_ij = -(c_i + np.dot(g[i, :], self.p)) / np.dot(g[i, :], alpha_coef)
                 if np.abs(alpha_ij) < alpha:
                     alpha = np.abs(alpha_ij)
         return alpha
+
 
     def get_action_space_constraints(self):
         """
@@ -190,13 +174,7 @@ class ConstraintMapping:
         Gets action space constraints of the form c+g@a<=0
         :return:
         """
-        ub = self.env.action_space.high
-        lb = self.env.action_space.low
-        identity = np.eye(self.env.action_space.shape[0])
-
-        c = np.concatenate((-ub, lb))
-        g = np.concatenate((identity, -identity))
-        return c, g
+        return self.safety_layer.get_action_space_constraints()
 
     def get_constraint_boundaries(self, observation, c, augment_action_space=True):
         """
@@ -205,6 +183,13 @@ class ConstraintMapping:
         :param c: Should be the current constraint values
         :return:
         """
+
+        c, g = self.safety_layer.get_constraint_boundaries(observation,
+                                                           c,
+                                                           augment_action_space=augment_action_space,
+                                                           leq_zero=True)
+        return c.detach().numpy(), g.detach().numpy()
+        # return c, g
         try:
             g = [x(self.safety_layer._as_tensor(observation["agent_position"]).view(1, -1)) for x in self.safety_layer._models]
         except IndexError:
@@ -282,6 +267,13 @@ class ConstraintMapping:
         constrained_region_action = lam*(bounding_beta-self.p)+self.p
         return constrained_region_action
 
+    @staticmethod
+    def _is_close(a, b):
+        try:
+            return torch.isclose(a, b)
+        except TypeError:
+            return np.isclose(a, b)
+
     def map_beta_to_safe(self, obs, beta_action, c, plot=False, verbose=False, save_fig_name=None):
         """
         Map an action selected from the beta distribution through an injective function to the safe region
@@ -294,7 +286,7 @@ class ConstraintMapping:
         alpha = self.get_D(self.A, self.C)
         translated_action = self.map_to_D(beta_action, alpha)
 
-        if np.isclose(self.p, translated_action).all():
+        if self._is_close(self.p, translated_action).all():
             scaled_action = translated_action
             d, bounding_beta = None, None
         else:
@@ -310,8 +302,16 @@ class ConstraintMapping:
 
         return scaled_action
 
-    def plot_mapping(self, beta_action=None, scaled_action=None, d=None, A=None, C=None,
-                     alpha=None, bounding_beta=None, corners=None, region_size_factor=1., fig_name=None):
+    def plot_mapping(self, beta_action=None,
+                     scaled_action=None,
+                     d=None,
+                     A=None,
+                     C=None,
+                     alpha=None,
+                     bounding_beta=None,
+                     corners=None,
+                     region_size_factor=1.,
+                     fig_name=None):
         """
         A@action<=C
         :param beta_action:
@@ -435,24 +435,24 @@ class IllustrativeBetaMapping(ConstraintMapping):
             return c, g
 
 
+# TODO see how this inheritance works
+# TODO write this class so that we can use this shit with DDPG
 
 
 
 def get_safety_layer(env, fname, train=False, epochs=25):
-    import dill as pickle
+    from dev.safety_layers.augmented import AugmentedMultipleSafetySecondary
     # TestEnv were 'safety_layer.p'  or  'safety_layer_1.p'
     if train:
-        from halev_dev.algos.safe_microgrid import MultipleSafetyLayer, AugmentedMultipleSafetySecondary
-        safety_layer = MultipleSafetyLayer(env)
+        safety_layer = AugmentedMultipleSafetySecondary(env)
         safety_layer._config.epochs = epochs
         safety_layer.train()
-        f = open(fname, 'wb')
-        pickle.dump(safety_layer, f)
-        f.close()
+        safety_layer.save(fname=fname)
     else:
-        f = open(fname, 'rb')
-        safety_layer = pickle.load(f)
-        f.close()
+        safety_layer = AugmentedMultipleSafetySecondary.load(torch.load(fname))
+
+    assert env.action_space.shape == safety_layer._env.action_space.shape
+    assert env.observation_space.shape == safety_layer._env.observation_space.shape
     return safety_layer
 
 def ballnd_test():
@@ -519,9 +519,9 @@ def test_test():
         beta_action = beta_points[j] if j<len(beta_points) else np.random.rand(2)
 
         fig_name = 'images/mapping_' + str(round(beta_action[0],2)) + '_' + str(round(beta_action[1],2)) + '.png'
-        scaled_action = mapping.map_beta_to_safe(beta_action, obs, c, plot=True, verbose=True, save_fig_name=fig_name)
+        scaled_action = mapping.map_beta_to_safe(obs, beta_action, c, plot=True, verbose=True, save_fig_name=fig_name)
         obs, reward, done, info = env.step(scaled_action)
 
 if __name__ == '__main__':
-    ballnd_test_new()
-    # test_ test()
+    # ballnd_test_new()
+    test_test()

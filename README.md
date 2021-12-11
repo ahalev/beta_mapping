@@ -1,59 +1,65 @@
-# Safe-Explorer
-
+# Beta-Mapping
 ## Introduction
 
-This repository contains Pytorch implementation of paper ["Safe Exploration in Continuous Action Spaces" [Dalal et al.]](https://arxiv.org/pdf/1801.08757.pdf) along with ["Continuous Control With Deep Reinforcement
-Learning" [Lillicrap et al.]](https://arxiv.org/pdf/1509.02971.pdf). Dalal et al. present a closed form analytically optimal solution to ensure safety in continuous action space. The proposed "safety layer",
-makes the smallest possible perturbation to the original action such that safety constraints are satisfied.
+This repository contains code to run *Beta-Mapping*, an experimental method for constrained reinforcement learning.
 
-![safety layer](imagesafety_layer.png)
+Note that this project is still in the experimental stage and the code is not guaranteed to work.
 
-Dalal et al. also propose two new domains BallND and Spaceship which are governed by first and second order dynamics respectively. In Spaceship domain agent receives a reward only on task completion, while BallND has continuous reward based distance from the target. Implementation of both of these tasks extend OpenAI gym's environment interface (`gym.Env`).
+We define a reinforcement learning policy over 
+a known safe region <img src="https://render.githubusercontent.com/render/math?math={C}(s)">. 
+Note that it is necessary that the region 
+<img src="https://render.githubusercontent.com/render/math?math={C}(s)">
+ is convex; in this work, we also assume that 
+ <img src="https://render.githubusercontent.com/render/math?math={C}(s)">
+  is defined by a set of inequalities, linear in the action 
+  <img src="https://render.githubusercontent.com/render/math?math=a">, and is bounded. 
+  In environments with bounded action spaces, augmenting the set of inequalities with the action space bounds easily satisfies this latter requirement. 
 
-## Setup
+The basic idea to define a policy over a safe region is to select actions from the beta distribution, defined over 
+<img src="https://render.githubusercontent.com/render/math?math=[0,1]^n">. 
+Actions are then mapped to an action
+<img src="https://render.githubusercontent.com/render/math?math=a^{'}">
+in the cube 
+<img src="https://render.githubusercontent.com/render/math?math=D\equiv p + \alpha[-1,1]^n">
+that is a subset of the safe region 
+<img src="https://render.githubusercontent.com/render/math?math={C}(s)">. Finally, actions are scaled from 
+<img src="https://render.githubusercontent.com/render/math?math=D">
+ to 
+ <img src="https://render.githubusercontent.com/render/math?math={C}(s)">
+along the line 
+<img src="https://render.githubusercontent.com/render/math?math=\xi(t)= p+t (a'-p)">
+ interpolating
+ <img src="https://render.githubusercontent.com/render/math?math=a^{'}"> 
+ and 
+ <img src="https://render.githubusercontent.com/render/math?math=p"> 
+ with the safe region action 
+ <img src="https://render.githubusercontent.com/render/math?math=a^{''}=\xi(t^*)">
+  depending on the factor 
+  <img src="https://render.githubusercontent.com/render/math?math=t^*">
+   that ensures that the distance between 
+   <img src="https://render.githubusercontent.com/render/math?math=a^{''}">
+    and the intersection of 
+    <img src="https://render.githubusercontent.com/render/math?math=\xi(t)">
+     with the boundary of 
+     <img src="https://render.githubusercontent.com/render/math?math={C}(s)">
+      is proportional to the distance between 
+      <img src="https://render.githubusercontent.com/render/math?math=a^{'}">
+       and the intersection of 
+       <img src="https://render.githubusercontent.com/render/math?math=\xi(t)">
+        with the boundary of 
+        <img src="https://render.githubusercontent.com/render/math?math=D">
+        . An example of this mapping is shown in the figure below.
 
-The code requires Python 3.6+ and is tested with torch 1.1.0. To install dependencies run,
+Note that, crucially, the mapping 
+<img src="https://render.githubusercontent.com/render/math?math=\xi(t^*)">
+ is bijective -- each action 
+ <img src="https://render.githubusercontent.com/render/math?math=a"> 
+ selected by the agent from the beta-parameterized policy is mapped to a unique action 
+ <img src="https://render.githubusercontent.com/render/math?math=a^{''}">
+  in the constrained region. Because of this bijection, there is no bias in projection: 
+  <img src="https://render.githubusercontent.com/render/math?math=Q_\pi(s,a^{''})-Q_\pi(s,a)=0">.
 
-```sh
-pip install -r requirements.txt
-```
+This repository contains code from the [Safe Explorer project](https://github.com/AgrawalAmey/safe-explorer),
+in the safe_explorer folder.
 
-## Training
-
-To obtain list of parameters and their default values run,
-
-```sh
-python -m safe_explorer.main --help
-```
-
-Train the model by simply running,
-
-### BallND
-
-```sh
-python -m safe_explorer.main --main_trainer_task ballnd
-```
-
-### Spaceship
-
-```sh
-python -m safe_explorer.main --main_trainer_task spaceship
-```
-
-Monitor training with Tensorboard,
-```sh
-tensorboard --logdir=runs
-```
-
-## Results
-
-To be updated.
-
-## Acknowledgement
-
-Some modifications in DDPG implementation are based [OpenAI Spinning Up implement](https://spinningup.openai.com/en/latest/algorithms/ddpg.html).
-
-## References
-- Lillicrap, Timothy P., et al. "Continuous control with deep reinforcement learning." arXiv preprint arXiv:1509.02971 (2015).
-
-- Dalal, Gal, et al. "Safe exploration in continuous action spaces." arXiv preprint arXiv:1801.08757 (2018).
+![figure](beta_constraints/images/beta_mapping_example.png)

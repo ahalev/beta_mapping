@@ -1,6 +1,5 @@
-from halev_dev.algos.PPO import PPO
-from beta_constraints.beta_mapping import ConstraintMapping
-import numpy as np
+from dev.algos.policy_gradient.stochastic import PPO
+from beta_constraints.mapping.beta_mapping import ConstraintMapping
 import torch
 from gym import Env
 
@@ -25,7 +24,6 @@ class BetaConstrainedPPO(PPO):
         assert isinstance(env, Env)
 
         self.mapping = ConstraintMapping(env, safety_layer)
-
 
     def _get_action(self, observation):
         beta_action, value, log_prob = self.actor_critic.step(torch.as_tensor(observation, dtype=torch.float32), )

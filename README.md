@@ -1,6 +1,8 @@
 # Beta-Mapping
 ## Introduction
 
+*Some equations in this README are not visible in dark mode.* 
+
 This repository contains code to run *Beta-Mapping*, an experimental method for constrained reinforcement learning.
 
 Note that this project is still in the experimental stage and the code is not guaranteed to work.

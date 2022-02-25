@@ -1,4 +1,5 @@
 # Beta-Mapping
+
 ## Introduction
 
 *Some equations in this README are not visible in dark mode.* 
@@ -65,3 +66,9 @@ This repository contains code from the [Safe Explorer project](https://github.co
 in the safe_explorer folder.
 
 ![figure](beta_constraints/images/beta_mapping_example.png)
+
+## Quick Start
+
+An example script is located in experiments/env_runner.py. This script requires private code to run; you may message me 
+if you would like access.
+
